@@ -1,0 +1,130 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyCode Doctor | Python Code Reviewer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">Py</span>
+    <span>PyCode <b>Doctor</b></span>
+  </div>
+  <span class="tag">AI-Powered Python Review</span>
+</header>
+
+<main class="wrap">
+
+<section class="hero">
+  <p class="eyebrow">YOUR PYTHON CODING COMPANION</p>
+  <h1>Find bugs. Learn better practices.</h1>
+  <p class="sub">
+    Paste your Python code to detect syntax issues,
+    understand mistakes and improve code quality.
+  </p>
+</section>
+
+<section class="workspace">
+
+  <div class="editor-head">
+    <div>
+      <span class="dot"></span>
+      <b>python</b>
+      <span class="muted"> · code editor</span>
+    </div>
+    <button class="ghost" id="sampleBtn">Load sample</button>
+  </div>
+
+  <textarea id="code" spellcheck="false"
+    placeholder="# Paste your Python code here...
+def greet(name):
+    print('Hello ' + name)
+
+greet('Student')"></textarea>
+
+  <div class="editor-foot">
+    <span id="charCount">0 characters</span>
+    <button class="primary" id="analyzeBtn">
+      ✦ Analyze my code
+    </button>
+  </div>
+
+</section>
+
+<div id="errorBox" class="error hidden"></div>
+
+<section id="results" class="results hidden">
+
+  <div class="result-top">
+    <div>
+      <p class="eyebrow">ANALYSIS REPORT</p>
+      <h2>Your code review</h2>
+    </div>
+
+    <div class="score">
+      <strong id="score">--</strong>
+      <span>/ 100<br>quality score</span>
+    </div>
+  </div>
+
+  <div class="status" id="syntaxStatus"></div>
+
+  <h3>Detected issues</h3>
+  <div id="issues" class="issue-list"></div>
+
+  <h3>Best-practice checklist</h3>
+  <ul id="suggestions" class="suggestions"></ul>
+
+  <div id="aiPanel" class="ai-panel hidden">
+    <h3>✦ AI reviewer</h3>
+    <div id="aiReview" class="markdown"></div>
+  </div>
+
+  <p class="disclaimer">
+    Note: This tool performs static checks; it does not execute
+    submitted code. Always test suggested changes before using them.
+  </p>
+
+</section>
+
+<section class="how">
+  <h2>How it works</h2>
+
+  <div class="steps">
+
+    <div>
+      <b>01</b>
+      <h3>Paste code</h3>
+      <p>Enter your Python program in the editor.</p>
+    </div>
+
+    <div>
+      <b>02</b>
+      <h3>Analyze</h3>
+      <p>Static checks inspect syntax and common style issues.</p>
+    </div>
+
+    <div>
+      <b>03</b>
+      <h3>Improve</h3>
+      <p>Read explanations and apply best-practice suggestions.</p>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  PyCode Doctor · Built for Python learners and postgraduate projects
+</footer>
+
+</main>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
