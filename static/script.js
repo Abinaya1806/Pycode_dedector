@@ -8,14 +8,14 @@ const errorBox = document.getElementById("errorBox");
 
 let pyodideInstance = null;
 
-const sampleCode = `def calculateTotal(price, tax):
+const sampleCode = `def calculate_total(price, tax):
     try:
         total = price + tax
         return total
-    except:
-        print("Error")
+    except ValueError:
+        print("Invalid value")
 
-result = calculateTotal(100, 10)
+result = calculate_total(100, 10)
 print(result)
 `;
 
@@ -57,16 +57,13 @@ async function loadPython() {
     if (pyodideInstance) return pyodideInstance;
 
     if (typeof loadPyodide !== "function") {
-        throw new Error(
-            "Python engine could not load. Check your internet connection."
-        );
+        throw new Error("Python engine is not loaded. Refresh the page and try again.");
     }
 
     analyzeBtn.textContent = "Loading Python engine...";
 
     pyodideInstance = await loadPyodide({
-        indexURL:
-        "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
+        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
     });
 
     return pyodideInstance;
@@ -79,17 +76,15 @@ import json
 def analyze_python(source):
     issues = []
     suggestions = []
-    syntax_valid = True
 
     try:
         tree = ast.parse(source)
         compile(source, "<submitted_code>", "exec")
+
     except SyntaxError as error:
-        syntax_valid = False
         issues.append({
             "title": "Python Syntax Error",
-            "description": str(error.msg) +
-                " at line " + str(error.lineno),
+            "description": str(error.msg) + " at line " + str(error.lineno),
             "type": "Error"
         })
 
@@ -103,96 +98,72 @@ def analyze_python(source):
     lines = source.splitlines()
 
     for number, line in enumerate(lines, start=1):
+
         if len(line) > 79:
             issues.append({
                 "title": "Long Line",
-                "description":
-                    "Line " + str(number) +
-                    " contains " + str(len(line)) +
-                    " characters. Consider shortening it.",
+                "description": "Line " + str(number) + " is too long.",
                 "type": "Warning"
             })
 
         if line.rstrip() != line:
             issues.append({
                 "title": "Trailing Whitespace",
-                "description":
-                    "Remove unnecessary spaces at line " +
-                    str(number) + ".",
+                "description": "Remove extra spaces at line " + str(number),
                 "type": "Suggestion"
             })
 
     for node in ast.walk(tree):
 
         if isinstance(node, ast.FunctionDef):
+
             if not node.name.islower() or "__" in node.name:
                 issues.append({
                     "title": "Naming Convention",
-                    "description":
-                        "Use lowercase snake_case for function '" +
-                        node.name + "'.",
+                    "description": "Use lowercase snake_case for function " + node.name,
                     "type": "Suggestion"
                 })
 
             if not ast.get_docstring(node):
                 issues.append({
                     "title": "Missing Docstring",
-                    "description":
-                        "Add a docstring to function '" +
-                        node.name + "'.",
+                    "description": "Add a docstring to function " + node.name,
                     "type": "Suggestion"
                 })
 
-        if isinstance(node, ast.ExceptHandler):
-            if node.type is None:
-                issues.append({
-                    "title": "Bare Except Statement",
-                    "description":
-                        "Use a specific exception such as ValueError " +
-                        "instead of a bare except.",
-                    "type": "Warning"
-                })
+        if isinstance(node, ast.ExceptHandler) and node.type is None:
+            issues.append({
+                "title": "Bare Except Statement",
+                "description": "Use a specific exception instead of bare except.",
+                "type": "Warning"
+            })
 
-        if isinstance(node, ast.ClassDef):
-            if not ast.get_docstring(node):
-                issues.append({
-                    "title": "Missing Class Docstring",
-                    "description":
-                        "Add a docstring to class '" +
-                        node.name + "'.",
-                    "type": "Suggestion"
-                })
+        if isinstance(node, ast.ClassDef) and not ast.get_docstring(node):
+            issues.append({
+                "title": "Missing Class Docstring",
+                "description": "Add a docstring to class " + node.name,
+                "type": "Suggestion"
+            })
 
-    if not any(isinstance(n, ast.FunctionDef)
-               for n in ast.walk(tree)):
-        suggestions.append(
-            "Consider using functions to organize reusable code."
-        )
+    if not any(isinstance(n, ast.FunctionDef) for n in ast.walk(tree)):
+        suggestions.append("Consider using functions to organize reusable code.")
 
-    if not any(isinstance(n, ast.Name) and
-               isinstance(n.ctx, ast.Store)
-               for n in ast.walk(tree)):
-        suggestions.append(
-            "Use meaningful variables to make your code easier to read."
-        )
-
-    if not source.strip():
-        suggestions.append("Enter some Python code to analyze.")
+    if not any(
+        isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+        for n in ast.walk(tree)
+    ):
+        suggestions.append("Use meaningful variables to improve readability.")
 
     if "if __name__ == '__main__':" not in source:
-        suggestions.append(
-            "For standalone scripts, consider using a main guard."
-        )
+        suggestions.append("Consider using a main guard for standalone scripts.")
 
     score = max(0, 100 - len(issues) * 10)
 
     if not issues:
-        suggestions.append(
-            "Excellent! No issues were detected by these basic checks."
-        )
+        suggestions.append("Excellent! No issues were detected by these basic checks.")
 
     return json.dumps({
-        "valid": syntax_valid,
+        "valid": True,
         "issues": issues,
         "suggestions": suggestions,
         "score": score
@@ -220,18 +191,16 @@ async function analyzeCode() {
 
         pyodide.globals.set("source", code);
 
-        const output = await pyodide.runPythonAsync(
-            pythonAnalyzer
-        );
+        const output = await pyodide.runPythonAsync(pythonAnalyzer);
 
-       const report = typeof output === "string"
-    ? JSON.parse(output)
-    : output.toJs({ dict_converter: Object.fromEntries });
+        const report = JSON.parse(String(output));
 
         displayResults(report);
 
     } catch (error) {
         showMessage("Analysis failed: " + error.message);
+        console.error(error);
+
     } finally {
         analyzeBtn.disabled = false;
         analyzeBtn.textContent = "✦ Analyze my code";
@@ -240,14 +209,13 @@ async function analyzeCode() {
 
 function displayResults(report) {
     const issuesContainer = document.getElementById("issues");
-    const suggestionsContainer =
-        document.getElementById("suggestions");
+    const suggestionsContainer = document.getElementById("suggestions");
 
     issuesContainer.replaceChildren();
     suggestionsContainer.replaceChildren();
 
     document.getElementById("score").textContent =
-        report.score;
+        report.score ?? 0;
 
     const status = document.getElementById("syntaxStatus");
 
@@ -259,7 +227,10 @@ function displayResults(report) {
         ? "status success"
         : "status danger";
 
-    if (!report.issues || report.issues.length === 0)  {
+    const issues = report.issues || [];
+    const suggestions = report.suggestions || [];
+
+    if (issues.length === 0) {
         addIssue(
             issuesContainer,
             "No issues detected",
@@ -267,7 +238,7 @@ function displayResults(report) {
             "Success"
         );
     } else {
-        report.issues.forEach(issue => {
+        issues.forEach(issue => {
             addIssue(
                 issuesContainer,
                 issue.title,
@@ -277,13 +248,14 @@ function displayResults(report) {
         });
     }
 
-   (report.suggestions || []).forEach(suggestion =>  {
+    suggestions.forEach(suggestion => {
         const li = document.createElement("li");
         li.textContent = suggestion;
         suggestionsContainer.appendChild(li);
     });
 
     results.classList.remove("hidden");
+
     results.scrollIntoView({
         behavior: "smooth",
         block: "start"
