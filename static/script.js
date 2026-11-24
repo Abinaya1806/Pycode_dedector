@@ -198,7 +198,7 @@ def analyze_python(source):
         "score": score
     })
 
-json.dumps(analyze_python(source))
+analyze_python(source)
 `;
 
 async function analyzeCode() {
