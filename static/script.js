@@ -1,141 +1,291 @@
 
-const codeBox = document.getElementById('code');
-const count = document.getElementById('charCount');
-const btn = document.getElementById('analyzeBtn');
-const results = document.getElementById('results');
-const errorBox = document.getElementById('errorBox');
+const codeInput = document.getElementById("code");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const sampleBtn = document.getElementById("sampleBtn");
+const charCount = document.getElementById("charCount");
+const results = document.getElementById("results");
+const errorBox = document.getElementById("errorBox");
 
-codeBox.addEventListener('input', () => {
-    count.textContent = codeBox.value.length + ' characters';
-});
+let pyodideInstance = null;
 
-document.getElementById('sampleBtn').addEventListener('click', () => {
-    codeBox.value = `def calculateTotal(price, quantity):
+const sampleCode = `def calculateTotal(price, tax):
     try:
-        total = price * quantity
-        print('Total:', total)
+        total = price + tax
+        return total
     except:
-        print('Something went wrong')
+        print("Error")
 
-calculateTotal(10, 3)`;
+result = calculateTotal(100, 10)
+print(result)
+`;
 
-    count.textContent = codeBox.value.length + ' characters';
+codeInput.addEventListener("input", () => {
+    charCount.textContent =
+        codeInput.value.length + " characters";
 });
 
-btn.addEventListener('click', async () => {
+sampleBtn.addEventListener("click", () => {
+    codeInput.value = sampleCode;
+    codeInput.dispatchEvent(new Event("input"));
+    results.classList.add("hidden");
+    errorBox.classList.add("hidden");
+});
 
-    errorBox.classList.add('hidden');
-    results.classList.add('hidden');
+function showMessage(message) {
+    errorBox.textContent = message;
+    errorBox.classList.remove("hidden");
+}
 
-    if (!codeBox.value.trim()) {
-        showError('Please paste some Python code first.');
+function addIssue(container, title, description, type) {
+    const item = document.createElement("div");
+    item.className = "issue";
+
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+
+    const detail = document.createElement("p");
+    detail.textContent = description;
+
+    const label = document.createElement("span");
+    label.textContent = type;
+
+    item.append(heading, detail, label);
+    container.appendChild(item);
+}
+
+async function loadPython() {
+    if (pyodideInstance) return pyodideInstance;
+
+    if (typeof loadPyodide !== "function") {
+        throw new Error(
+            "Python engine could not load. Check your internet connection."
+        );
+    }
+
+    analyzeBtn.textContent = "Loading Python engine...";
+
+    pyodideInstance = await loadPyodide({
+        indexURL:
+        "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
+    });
+
+    return pyodideInstance;
+}
+
+const pythonAnalyzer = `
+import ast
+import json
+
+def analyze_python(source):
+    issues = []
+    suggestions = []
+    syntax_valid = True
+
+    try:
+        tree = ast.parse(source)
+        compile(source, "<submitted_code>", "exec")
+    except SyntaxError as error:
+        syntax_valid = False
+        issues.append({
+            "title": "Python Syntax Error",
+            "description": str(error.msg) +
+                " at line " + str(error.lineno),
+            "type": "Error"
+        })
+
+        return json.dumps({
+            "valid": False,
+            "issues": issues,
+            "suggestions": suggestions,
+            "score": 0
+        })
+
+    lines = source.splitlines()
+
+    for number, line in enumerate(lines, start=1):
+        if len(line) > 79:
+            issues.append({
+                "title": "Long Line",
+                "description":
+                    "Line " + str(number) +
+                    " contains " + str(len(line)) +
+                    " characters. Consider shortening it.",
+                "type": "Warning"
+            })
+
+        if line.rstrip() != line:
+            issues.append({
+                "title": "Trailing Whitespace",
+                "description":
+                    "Remove unnecessary spaces at line " +
+                    str(number) + ".",
+                "type": "Suggestion"
+            })
+
+    for node in ast.walk(tree):
+
+        if isinstance(node, ast.FunctionDef):
+            if not node.name.islower() or "__" in node.name:
+                issues.append({
+                    "title": "Naming Convention",
+                    "description":
+                        "Use lowercase snake_case for function '" +
+                        node.name + "'.",
+                    "type": "Suggestion"
+                })
+
+            if not ast.get_docstring(node):
+                issues.append({
+                    "title": "Missing Docstring",
+                    "description":
+                        "Add a docstring to function '" +
+                        node.name + "'.",
+                    "type": "Suggestion"
+                })
+
+        if isinstance(node, ast.ExceptHandler):
+            if node.type is None:
+                issues.append({
+                    "title": "Bare Except Statement",
+                    "description":
+                        "Use a specific exception such as ValueError " +
+                        "instead of a bare except.",
+                    "type": "Warning"
+                })
+
+        if isinstance(node, ast.ClassDef):
+            if not ast.get_docstring(node):
+                issues.append({
+                    "title": "Missing Class Docstring",
+                    "description":
+                        "Add a docstring to class '" +
+                        node.name + "'.",
+                    "type": "Suggestion"
+                })
+
+    if not any(isinstance(n, ast.FunctionDef)
+               for n in ast.walk(tree)):
+        suggestions.append(
+            "Consider using functions to organize reusable code."
+        )
+
+    if not any(isinstance(n, ast.Name) and
+               isinstance(n.ctx, ast.Store)
+               for n in ast.walk(tree)):
+        suggestions.append(
+            "Use meaningful variables to make your code easier to read."
+        )
+
+    if not source.strip():
+        suggestions.append("Enter some Python code to analyze.")
+
+    if "if __name__ == '__main__':" not in source:
+        suggestions.append(
+            "For standalone scripts, consider using a main guard."
+        )
+
+    score = max(0, 100 - len(issues) * 10)
+
+    if not issues:
+        suggestions.append(
+            "Excellent! No issues were detected by these basic checks."
+        )
+
+    return json.dumps({
+        "valid": syntax_valid,
+        "issues": issues,
+        "suggestions": suggestions,
+        "score": score
+    })
+
+json.dumps(analyze_python(source))
+`;
+
+async function analyzeCode() {
+    const code = codeInput.value;
+
+    errorBox.classList.add("hidden");
+    results.classList.add("hidden");
+
+    if (!code.trim()) {
+        showMessage("Please enter Python code before analyzing.");
         return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Analyzing...';
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyzing...";
 
     try {
-        const res = await fetch('/analyze', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                code: codeBox.value
-            })
-        });
+        const pyodide = await loadPython();
 
-        const data = await res.json();
+        pyodide.globals.set("source", code);
 
-        if (!res.ok) {
-            throw new Error(data.error || 'Analysis failed');
-        }
+        const output = await pyodide.runPythonAsync(
+            pythonAnalyzer
+        );
 
-        document.getElementById('score').textContent = data.score;
+        const report = JSON.parse(output);
 
-        const status = document.getElementById('syntaxStatus');
+        displayResults(report);
 
-        status.textContent = data.syntax_ok
-            ? '✓ No syntax errors detected.'
-            : '⚠ Syntax error detected. Review the issue below.';
-
-        status.className = 'status' + (data.syntax_ok ? '' : ' bad');
-
-        const issues = document.getElementById('issues');
-        issues.innerHTML = '';
-
-        if (!data.issues.length) {
-            issues.innerHTML = `
-                <div class="issue">
-                    <b>Looks good!</b>
-                    <p>No issues were detected by the basic checks.</p>
-                </div>`;
-        }
-
-        data.issues.forEach(x => {
-
-            const div = document.createElement('div');
-            div.className = 'issue';
-
-            const head = document.createElement('div');
-            head.className = 'issue-head';
-
-            const title = document.createElement('b');
-            title.textContent = x.type;
-
-            const line = document.createElement('small');
-            line.textContent = x.line ? 'Line ' + x.line : 'General';
-
-            head.append(title, line);
-
-            const message = document.createElement('p');
-            message.textContent = x.message;
-
-            const tip = document.createElement('em');
-            tip.textContent = 'Tip: ' + x.tip;
-
-            div.append(head, message, tip);
-            issues.appendChild(div);
-        });
-
-        const list = document.getElementById('suggestions');
-        list.innerHTML = '';
-
-        data.suggestions.forEach(s => {
-            const li = document.createElement('li');
-            li.textContent = s;
-            list.appendChild(li);
-        });
-
-        const aiPanel = document.getElementById('aiPanel');
-
-        if (data.ai_review) {
-            aiPanel.classList.remove('hidden');
-
-            document.getElementById('aiReview').textContent =
-                data.ai_review;
-        } else {
-            aiPanel.classList.add('hidden');
-        }
-
-        results.classList.remove('hidden');
-
-        results.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
-
-    } catch (e) {
-        showError(e.message);
-
+    } catch (error) {
+        showMessage("Analysis failed: " + error.message);
     } finally {
-        btn.disabled = false;
-        btn.textContent = '✦ Analyze my code';
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = "✦ Analyze my code";
     }
-});
-
-function showError(msg) {
-    errorBox.textContent = msg;
-    errorBox.classList.remove('hidden');
 }
+
+function displayResults(report) {
+    const issuesContainer = document.getElementById("issues");
+    const suggestionsContainer =
+        document.getElementById("suggestions");
+
+    issuesContainer.replaceChildren();
+    suggestionsContainer.replaceChildren();
+
+    document.getElementById("score").textContent =
+        report.score;
+
+    const status = document.getElementById("syntaxStatus");
+
+    status.textContent = report.valid
+        ? "✓ Python syntax is valid"
+        : "✕ Python syntax errors found";
+
+    status.className = report.valid
+        ? "status success"
+        : "status danger";
+
+    if (report.issues.length === 0) {
+        addIssue(
+            issuesContainer,
+            "No issues detected",
+            "Your code passed the available static checks.",
+            "Success"
+        );
+    } else {
+        report.issues.forEach(issue => {
+            addIssue(
+                issuesContainer,
+                issue.title,
+                issue.description,
+                issue.type
+            );
+        });
+    }
+
+    report.suggestions.forEach(suggestion => {
+        const li = document.createElement("li");
+        li.textContent = suggestion;
+        suggestionsContainer.appendChild(li);
+    });
+
+    results.classList.remove("hidden");
+    results.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+}
+
+analyzeBtn.addEventListener("click", analyzeCode);
