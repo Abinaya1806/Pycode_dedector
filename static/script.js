@@ -224,7 +224,9 @@ async function analyzeCode() {
             pythonAnalyzer
         );
 
-        const report = JSON.parse(output);
+       const report = typeof output === "string"
+    ? JSON.parse(output)
+    : output.toJs({ dict_converter: Object.fromEntries });
 
         displayResults(report);
 
@@ -257,7 +259,7 @@ function displayResults(report) {
         ? "status success"
         : "status danger";
 
-    if (report.issues.length === 0) {
+    if (!report.issues || report.issues.length === 0)  {
         addIssue(
             issuesContainer,
             "No issues detected",
@@ -275,7 +277,7 @@ function displayResults(report) {
         });
     }
 
-    report.suggestions.forEach(suggestion => {
+   (report.suggestions || []).forEach(suggestion =>  {
         const li = document.createElement("li");
         li.textContent = suggestion;
         suggestionsContainer.appendChild(li);
